@@ -1,5 +1,6 @@
 ﻿
 using System.Globalization;
+using System.IO.Compression;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
@@ -132,12 +133,47 @@ class CompressionDecorator : DataSourceDecorator
 
     public override string ReadData()
     {
-        //TODO read data
-        return "";
+        using StreamReader sr = new StreamReader(FileName);
+        string data = sr.ReadToEnd(); 
+
+        byte[] decompressedBytes;
+
+        var compressedStream = new MemoryStream(Convert.FromBase64String(data));
+
+        using (var decompressorStream = new DeflateStream(compressedStream, CompressionMode.Decompress))
+        {
+            using (var decompressedStream = new MemoryStream())
+            {
+                decompressorStream.CopyTo(decompressedStream);
+
+                decompressedBytes = decompressedStream.ToArray();
+            }
+        }
+
+        return Encoding.UTF8.GetString(decompressedBytes);
+        
     }
     public override void WriteData(string message)
     {
-        //TODO write data
+        using StreamReader sr = new StreamReader(FileName);
+        string data = sr.ReadToEnd();
+
+        byte[] compressedBytes;
+
+        using (var uncompressedStream = new MemoryStream(Encoding.UTF8.GetBytes(data)))
+        {
+            using var compressedStream = new MemoryStream();
+
+            using (var compressorStream = new DeflateStream(compressedStream, CompressionLevel.Fastest, true))
+            {
+                uncompressedStream.CopyTo(compressorStream);
+            }
+
+            compressedBytes = compressedStream.ToArray();
+        }
+        using FileStream fs = new FileStream(FileName, FileMode.OpenOrCreate);
+        using StreamWriter sw = new StreamWriter(fs);
+        sw.Write(Convert.ToBase64String(compressedBytes));
     }
 }
 
